@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod gcm;
+pub mod hash;
 pub mod ptr;
 mod refs;
 
