@@ -2,6 +2,7 @@
 
 pub mod gcm;
 pub mod hash;
+pub mod hmac;
 pub mod ptr;
 mod refs;
 

@@ -3,7 +3,10 @@ use core::ptr::addr_of_mut;
 use paste::paste;
 use symcrypt_sys::{PCSYMCRYPT_HASH, SIZE_T};
 
-use crate::refs::{self, SecureZeroable};
+use crate::{
+    refs::{self, SecureZeroable},
+    symcrypt_init,
+};
 
 pub trait HashAlgorithm {
     type StreamState: SecureZeroable;
@@ -22,6 +25,7 @@ pub struct UnitializedHasher<T: HashAlgorithm>(T::StreamState);
 
 impl<T: HashAlgorithm> UnitializedHasher<T> {
     pub fn initialize<'a>(&'a mut self) -> Hasher<'a, T> {
+        symcrypt_init();
         unsafe {
             T::stream_init(addr_of_mut!(self.0));
             Hasher(refs::Initialized::new(&mut self.0))
