@@ -4,12 +4,14 @@ pub mod gcm;
 pub mod hash;
 pub mod hmac;
 pub mod ptr;
-mod refs;
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::{
+    mem,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use symcrypt_sys::{
-    SYMCRYPT_CODE_VERSION_API, SYMCRYPT_CODE_VERSION_MINOR,
+    SIZE_T, SYMCRYPT_CODE_VERSION_API, SYMCRYPT_CODE_VERSION_MINOR,
     SYMCRYPT_ERROR_SYMCRYPT_AUTHENTICATION_FAILURE, SYMCRYPT_ERROR_SYMCRYPT_BUFFER_TOO_SMALL,
     SYMCRYPT_ERROR_SYMCRYPT_EXTERNAL_FAILURE, SYMCRYPT_ERROR_SYMCRYPT_FIPS_FAILURE,
     SYMCRYPT_ERROR_SYMCRYPT_HARDWARE_FAILURE, SYMCRYPT_ERROR_SYMCRYPT_HBS_NO_OTS_KEYS_LEFT,
@@ -21,8 +23,10 @@ use symcrypt_sys::{
     SYMCRYPT_ERROR_SYMCRYPT_VALUE_TOO_LARGE, SYMCRYPT_ERROR_SYMCRYPT_WRONG_BLOCK_SIZE,
     SYMCRYPT_ERROR_SYMCRYPT_WRONG_DATA_SIZE, SYMCRYPT_ERROR_SYMCRYPT_WRONG_ITERATION_COUNT,
     SYMCRYPT_ERROR_SYMCRYPT_WRONG_KEY_SIZE, SYMCRYPT_ERROR_SYMCRYPT_WRONG_NONCE_SIZE,
-    SYMCRYPT_ERROR_SYMCRYPT_WRONG_TAG_SIZE, SymCryptModuleInit,
+    SYMCRYPT_ERROR_SYMCRYPT_WRONG_TAG_SIZE, SymCryptModuleInit, SymCryptWipe,
 };
+
+pub unsafe trait Zeroable {}
 
 fn symcrypt_init() {
     static ONCE: AtomicBool = AtomicBool::new(false);
@@ -32,6 +36,12 @@ fn symcrypt_init() {
         }
 
         ONCE.store(false, Ordering::Release);
+    }
+}
+
+pub fn symcrypt_wipe<T: Zeroable>(val: &mut T) {
+    unsafe {
+        SymCryptWipe(val as *mut _ as *mut _, mem::size_of::<T>() as SIZE_T);
     }
 }
 

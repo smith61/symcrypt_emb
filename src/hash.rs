@@ -1,15 +1,12 @@
-use core::ptr::addr_of_mut;
+use core::ptr;
 
 use paste::paste;
 use symcrypt_sys::{PCSYMCRYPT_HASH, SIZE_T};
 
-use crate::{
-    refs::{self, SecureZeroable},
-    symcrypt_init,
-};
+use crate::{Zeroable, ptr::UniquePointer, symcrypt_init, symcrypt_wipe};
 
 pub trait HashAlgorithm {
-    type StreamState: SecureZeroable;
+    type StreamState: Zeroable;
     type Result;
 
     fn get_hash_algorithm() -> PCSYMCRYPT_HASH;
@@ -21,48 +18,89 @@ pub trait HashAlgorithm {
     unsafe fn stream_result(state: *mut Self::StreamState, result: &mut Self::Result);
 }
 
-pub struct UnitializedHasher<T: HashAlgorithm>(T::StreamState);
+///
+/// This type represents an uninitialized hashing stream.
+///
+#[derive(Default)]
+pub struct UninitializedHasher<T: HashAlgorithm>(T::StreamState);
 
-impl<T: HashAlgorithm> UnitializedHasher<T> {
-    pub fn initialize<'a>(&'a mut self) -> Hasher<'a, T> {
-        symcrypt_init();
-        unsafe {
-            T::stream_init(addr_of_mut!(self.0));
-            Hasher(refs::Initialized::new(&mut self.0))
-        }
+///
+/// This type represents an initialized hashing stream.
+///
+pub struct Hasher<T: HashAlgorithm, P: UniquePointer<Target = UninitializedHasher<T>>>(P);
+
+impl<T: HashAlgorithm, P: UniquePointer<Target = UninitializedHasher<T>>> Drop for Hasher<T, P> {
+    fn drop(&mut self) {
+        symcrypt_wipe(&mut self.0.0);
     }
 }
 
-pub struct Hasher<'a, T: HashAlgorithm>(refs::Initialized<'a, T::StreamState>);
-
-impl<'a, T: HashAlgorithm> Hasher<'a, T> {
-    pub fn as_ref_mut<'b>(&'b mut self) -> HasherRefMut<'b, T> {
-        HasherRefMut(self.0.as_ref_mut())
+impl<T: HashAlgorithm, P: UniquePointer<Target = UninitializedHasher<T>>> Hasher<T, P> {
+    ///
+    /// `new` creates a new hashing stream at the provided location.
+    ///
+    /// `uninitialized_hasher` is a pointer to an uninitialized hashing stream
+    ///
+    pub fn new(mut uninitialized_hasher: P) -> Self {
+        symcrypt_init();
+        unsafe {
+            T::stream_init(ptr::addr_of_mut!(uninitialized_hasher.0));
+            Self(uninitialized_hasher)
+        }
     }
 
+    ///
+    /// `as_ref_mut` gets a mutable reference to the underlying hashing stream.
+    ///
+    pub fn as_ref_mut<'b>(&'b mut self) -> HasherRefMut<'b, T> {
+        HasherRefMut(self.0.deref_mut())
+    }
+
+    ///
+    /// `hash` appends the provided data buffer to the hashing stream.
+    ///
+    /// `data` is an array of bytes to be hashed.
+    ///
     pub fn hash(&mut self, data: &[u8]) {
         self.as_ref_mut().hash(data);
     }
 
-    pub fn complete(mut self, result: &mut T::Result) -> Hasher<'a, T> {
+    ///
+    /// `complete` finishes the hashing operation and returns a newly initialized
+    /// hashing stream.
+    ///
+    /// `result` is a reference to a location in which to write the generated hash.
+    ///
+    pub fn complete(mut self, result: &mut T::Result) -> Self {
         unsafe {
-            T::stream_result(self.0.get_state_ptr_mut(), result);
+            T::stream_result(ptr::addr_of_mut!(self.0.0), result);
         }
 
         self
     }
 }
 
-pub struct HasherRefMut<'a, T: HashAlgorithm>(refs::InitializedRefMut<'a, T::StreamState>);
+///
+/// This type represents a mutable reference to an initialized hashing stream.
+///
+pub struct HasherRefMut<'a, T: HashAlgorithm>(&'a mut UninitializedHasher<T>);
 
 impl<'a, T: HashAlgorithm> HasherRefMut<'a, T> {
+    ///
+    /// `as_ref_mut` gets a mutable reference to the underlying hashing stream.
+    ///
     pub fn as_ref_mut<'b>(&'b mut self) -> HasherRefMut<'b, T> {
-        HasherRefMut(self.0.as_ref_mut())
+        HasherRefMut(self.0)
     }
 
+    ///
+    /// `hash` appends the provided data buffer to the hashing stream.
+    ///
+    /// `data` is an array of bytes to be hashed.
+    ///
     pub fn hash(&mut self, data: &[u8]) {
         unsafe {
-            T::stream_append(self.0.get_state_ptr_mut(), data);
+            T::stream_append(ptr::addr_of_mut!(self.0.0), data);
         }
     }
 }
@@ -73,10 +111,22 @@ macro_rules! define_hash_algorithm {
             pub struct [<$lc HashAlgorithm>];
 
             pub type [<$lc HashResult>] = [u8; symcrypt_sys::[<SYMCRYPT_ $uc _RESULT_SIZE>] as usize];
-            pub type [<$lc Hasher>]<'a> = Hasher<'a, [<$lc HashAlgorithm>]>;
+            pub type [<$lc Hasher>]<P> = Hasher<[<$lc HashAlgorithm>], P>;
             pub type [<$lc HasherRefMut>]<'a> = HasherRefMut<'a, [<$lc HashAlgorithm>]>;
 
-            unsafe impl SecureZeroable for symcrypt_sys::[<SYMCRYPT_ $uc _STATE>] { }
+            //
+            // SAFETY: C FFI structs are always safe to zero
+            //
+            unsafe impl Zeroable for symcrypt_sys::[<SYMCRYPT_ $uc _STATE>] { }
+
+            //
+            // SAFETY: The uninitialized structure wrappers are safe to be sent
+            // across threads since they contain no state. Only when initialized
+            // behind some pointer will they contain state and Send/Sync properties
+            // are needed for those handles.
+            //
+            unsafe impl Send for UninitializedHasher<[<$lc HashAlgorithm>]> { }
+            unsafe impl Sync for UninitializedHasher<[<$lc HashAlgorithm>]> { }
 
             impl HashAlgorithm for [<$lc HashAlgorithm>] {
                 type StreamState = symcrypt_sys::[<SYMCRYPT_ $uc _STATE>];
