@@ -49,8 +49,8 @@ pub struct GcmUninitializedKey(SYMCRYPT_GCM_EXPANDED_KEY);
 // threads as it contains no state.
 //
 
-unsafe impl Send for GcmUninitializedKey { }
-unsafe impl Sync for GcmUninitializedKey { }
+unsafe impl Send for GcmUninitializedKey {}
+unsafe impl Sync for GcmUninitializedKey {}
 
 ///
 /// `GcmExpandedKey` represents a pointer to an initialized SYMCRYPT_GCM_EXPANDED_KEY.
@@ -345,8 +345,8 @@ pub struct GcmUnitializedStream<KP: OwningPointer<Target = GcmUninitializedKey>>
 // only used by `GcmInitializedStream` which is Send/Sync based on KP.
 //
 
-unsafe impl<KP: OwningPointer<Target = GcmUninitializedKey>> Send for GcmUnitializedStream<KP> { }
-unsafe impl<KP: OwningPointer<Target = GcmUninitializedKey>> Sync for GcmUnitializedStream<KP> { }
+unsafe impl<KP: OwningPointer<Target = GcmUninitializedKey>> Send for GcmUnitializedStream<KP> {}
+unsafe impl<KP: OwningPointer<Target = GcmUninitializedKey>> Sync for GcmUnitializedStream<KP> {}
 
 impl<KP: OwningPointer<Target = GcmUninitializedKey>> Default for GcmUnitializedStream<KP> {
     fn default() -> Self {
@@ -446,8 +446,8 @@ impl GcmInitializedStreamRefMut<'_> {
 // safe to be shared/sent with other threads.
 //
 
-unsafe impl Send for GcmInitializedStreamRefMut<'_> { }
-unsafe impl Sync for GcmInitializedStreamRefMut<'_> { }
+unsafe impl Send for GcmInitializedStreamRefMut<'_> {}
+unsafe impl Sync for GcmInitializedStreamRefMut<'_> {}
 
 ///
 /// This type represents a handle to an initialized GcmStream that can be used to authenticate,
