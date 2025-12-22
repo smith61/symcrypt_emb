@@ -1035,12 +1035,32 @@ mod test {
 
 #[cfg(all(test, feature = "std"))]
 mod std_test {
-    use std::rc::Rc;
+    use static_assertions::{assert_impl_all, assert_not_impl_any};
+    use std::{rc::Rc, sync::Arc};
 
     use crate::{
         SymCryptError,
-        gcm::{BlockCipherType, GcmDecryptionStream, GcmEncryptionStream, GcmExpandedKey},
+        gcm::{
+            BlockCipherType, GcmDecryptionStream, GcmEncryptionStream, GcmExpandedKey,
+            GcmInitializedStream, GcmInitializedStreamRefMut,
+        },
     };
+
+    #[test]
+    fn test_auto_traits() {
+        assert_impl_all!(GcmExpandedKey<&'static _>: Send, Sync);
+        assert_impl_all!(GcmExpandedKey<&'static mut _>: Send, Sync);
+        assert_impl_all!(GcmExpandedKey<Box<_>>: Send, Sync);
+        assert_not_impl_any!(GcmExpandedKey<Rc<_>>: Send, Sync);
+        assert_impl_all!(GcmExpandedKey<Arc<_>>: Send, Sync);
+
+        assert_impl_all!(GcmInitializedStream<&'static mut _, &'static _>: Send, Sync);
+        assert_not_impl_any!(GcmInitializedStream<&'static mut _, Rc<_>>: Send, Sync);
+        assert_impl_all!(GcmInitializedStream<Box<_>, &'static _>: Send, Sync);
+        assert_not_impl_any!(GcmInitializedStream<Box<_>, Rc<_>>: Send, Sync);
+
+        assert_impl_all!(GcmInitializedStreamRefMut<'static>: Send, Sync);
+    }
 
     #[test]
     fn test_owned_key() -> Result<(), SymCryptError> {

@@ -302,12 +302,12 @@ macro_rules! define_mac_algorithm {
             #[derive(Clone, Copy, Default)]
             pub struct [<$lc HmacAlgorithm>];
 
+            pub type [<$lc HmacResult>] = [u8; symcrypt_sys::[<SYMCRYPT_ $uc _RESULT_SIZE>] as usize];
             pub type [<$lc HmacUninitializedKey>] = HmacUninitializedKey<[<$lc HmacAlgorithm>]>;
             pub type [<$lc HmacExpandedKey>]<P> = HmacExpandedKey<[<$lc HmacAlgorithm>], P>;
             pub type [<$lc HmacUninitializedStream>]<KP> = HmacUninitializedStream<[<$lc HmacAlgorithm>], KP>;
             pub type [<$lc HmacStream>]<P, KP> = HmacStream<[<$lc HmacAlgorithm>], P, KP>;
             pub type [<$lc HmacStreamRefMut>]<'a> = HmacStreamRefMut<'a, [<$lc HmacAlgorithm>]>;
-            pub type [<$lc HmacResult>] = [u8; symcrypt_sys::[<SYMCRYPT_ $uc _RESULT_SIZE>] as usize];
 
             //
             // SAFETY: C FFI structs are always safe to zero
@@ -404,3 +404,173 @@ define_mac_algorithm!(Sha1, SHA1);
 define_mac_algorithm!(Sha256, SHA256);
 define_mac_algorithm!(Sha384, SHA384);
 define_mac_algorithm!(Sha512, SHA512);
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        SymCryptError,
+        hmac::{
+            Md5HmacExpandedKey, Md5HmacStream, Md5HmacUninitializedKey, Md5HmacUninitializedStream,
+            Sha1HmacExpandedKey, Sha1HmacStream, Sha1HmacUninitializedKey,
+            Sha1HmacUninitializedStream, Sha256HmacExpandedKey, Sha256HmacStream,
+            Sha256HmacUninitializedKey, Sha256HmacUninitializedStream, Sha384HmacExpandedKey,
+            Sha384HmacStream, Sha384HmacUninitializedKey, Sha384HmacUninitializedStream,
+            Sha512HmacExpandedKey, Sha512HmacStream, Sha512HmacUninitializedKey,
+            Sha512HmacUninitializedStream,
+        },
+    };
+
+    static KEY: &'static str = "feffe9928665731c6d6a8f9467308308";
+    static LOREM_IPSUM: &'static str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed dapibus consequat nisi nec dictum. Duis a tempor diam. Suspendisse a justo neque. Nullam laoreet bibendum lectus. Morbi at dapibus odio. Phasellus gravida lacus non tortor cursus, quis aliquam turpis mollis. Ut et dui tristique, blandit erat in, aliquam mauris.";
+
+    #[test]
+    fn test_md5() -> Result<(), SymCryptError> {
+        let expected_result = "7053FBF41DB128711D63E38305DCBAA6";
+        let as_bytes = LOREM_IPSUM.as_bytes();
+        let mut key = Md5HmacUninitializedKey::default();
+        let key = Md5HmacExpandedKey::expand_key(&mut key, &hex::decode(&KEY).unwrap())?;
+
+        let mut result = [0; _];
+        key.hmac(as_bytes, &mut result);
+        assert_eq!(hex::encode_upper(&result), expected_result);
+
+        let mut stream_storage = Md5HmacUninitializedStream::default();
+        for chunk_size in 1..as_bytes.len() {
+            let mut stream = Md5HmacStream::new(&mut stream_storage, key.as_ref());
+            for chunk in as_bytes.chunks(chunk_size) {
+                stream.append(chunk);
+            }
+
+            stream.result(&mut result);
+            assert_eq!(hex::encode_upper(&result), expected_result);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sha1() -> Result<(), SymCryptError> {
+        let expected_result = "AEF07DAA7F4955C2A0FB26F66CE481A20EC3627C";
+        let as_bytes = LOREM_IPSUM.as_bytes();
+        let mut key = Sha1HmacUninitializedKey::default();
+        let key = Sha1HmacExpandedKey::expand_key(&mut key, &hex::decode(&KEY).unwrap())?;
+
+        let mut result = [0; _];
+        key.hmac(as_bytes, &mut result);
+        assert_eq!(hex::encode_upper(&result), expected_result);
+
+        let mut stream_storage = Sha1HmacUninitializedStream::default();
+        for chunk_size in 1..as_bytes.len() {
+            let mut stream = Sha1HmacStream::new(&mut stream_storage, key.as_ref());
+            for chunk in as_bytes.chunks(chunk_size) {
+                stream.append(chunk);
+            }
+
+            stream.result(&mut result);
+            assert_eq!(hex::encode_upper(&result), expected_result);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sha256() -> Result<(), SymCryptError> {
+        let expected_result = "9A3ADF1664696458D66495C6756CFB5A532DB519259E1938132163B1471507F5";
+        let as_bytes = LOREM_IPSUM.as_bytes();
+        let mut key = Sha256HmacUninitializedKey::default();
+        let key = Sha256HmacExpandedKey::expand_key(&mut key, &hex::decode(&KEY).unwrap())?;
+
+        let mut result = [0; _];
+        key.hmac(as_bytes, &mut result);
+        assert_eq!(hex::encode_upper(&result), expected_result);
+
+        let mut stream_storage = Sha256HmacUninitializedStream::default();
+        for chunk_size in 1..as_bytes.len() {
+            let mut stream = Sha256HmacStream::new(&mut stream_storage, key.as_ref());
+            for chunk in as_bytes.chunks(chunk_size) {
+                stream.append(chunk);
+            }
+
+            stream.result(&mut result);
+            assert_eq!(hex::encode_upper(&result), expected_result);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sha384() -> Result<(), SymCryptError> {
+        let expected_result = "DD9862B33D71119C9FD878ED5FE2ACC559CB361C7E2DAC42B0D78071946EA3B50727EC426833E0E28DC916A6B6ADBEE0";
+        let as_bytes = LOREM_IPSUM.as_bytes();
+        let mut key = Sha384HmacUninitializedKey::default();
+        let key = Sha384HmacExpandedKey::expand_key(&mut key, &hex::decode(&KEY).unwrap())?;
+
+        let mut result = [0; _];
+        key.hmac(as_bytes, &mut result);
+        assert_eq!(hex::encode_upper(&result), expected_result);
+
+        let mut stream_storage = Sha384HmacUninitializedStream::default();
+        for chunk_size in 1..as_bytes.len() {
+            let mut stream = Sha384HmacStream::new(&mut stream_storage, key.as_ref());
+            for chunk in as_bytes.chunks(chunk_size) {
+                stream.append(chunk);
+            }
+
+            stream.result(&mut result);
+            assert_eq!(hex::encode_upper(&result), expected_result);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sha512() -> Result<(), SymCryptError> {
+        let expected_result = "A89B0CCD2D386D41D029173E8766FA1749BE3C14F7AAC3CCB78882F60719AF93CB322856474EB8ECE5AB3CAB1329DDA657ECBA741E1EC032A8FC2FCAA0A3614C";
+        let as_bytes = LOREM_IPSUM.as_bytes();
+        let mut key = Sha512HmacUninitializedKey::default();
+        let key = Sha512HmacExpandedKey::expand_key(&mut key, &hex::decode(&KEY).unwrap())?;
+
+        let mut result = [0; _];
+        key.hmac(as_bytes, &mut result);
+        assert_eq!(hex::encode_upper(&result), expected_result);
+
+        let mut stream_storage = Sha512HmacUninitializedStream::default();
+        for chunk_size in 1..as_bytes.len() {
+            let mut stream = Sha512HmacStream::new(&mut stream_storage, key.as_ref());
+            for chunk in as_bytes.chunks(chunk_size) {
+                stream.append(chunk);
+            }
+
+            stream.result(&mut result);
+            assert_eq!(hex::encode_upper(&result), expected_result);
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod std_test {
+    use static_assertions::{assert_impl_all, assert_not_impl_any};
+    use std::{rc::Rc, sync::Arc};
+
+    use crate::hmac::{
+        HmacInitializedStream, HmacInitializedStreamRefMut, Md5HmacAlgorithm, Md5HmacExpandedKey,
+    };
+
+    #[test]
+    fn test_auto_traits() {
+        assert_impl_all!(Md5HmacExpandedKey<&'static _>: Send, Sync);
+        assert_impl_all!(Md5HmacExpandedKey<&'static mut _>: Send, Sync);
+        assert_impl_all!(Md5HmacExpandedKey<Box<_>>: Send, Sync);
+        assert_not_impl_any!(Md5HmacExpandedKey<Rc<_>>: Send, Sync);
+        assert_impl_all!(Md5HmacExpandedKey<Arc<_>>: Send, Sync);
+
+        assert_impl_all!(HmacInitializedStream<Md5HmacAlgorithm, &'static mut _, &'static _>: Send, Sync);
+        assert_not_impl_any!(HmacInitializedStream<Md5HmacAlgorithm, &'static mut _, Rc<_>>: Send, Sync);
+        assert_impl_all!(HmacInitializedStream<Md5HmacAlgorithm, Box<_>, &'static _>: Send, Sync);
+        assert_not_impl_any!(HmacInitializedStream<Md5HmacAlgorithm, Box<_>, Rc<_>>: Send, Sync);
+
+        assert_impl_all!(HmacInitializedStreamRefMut<'static, Md5HmacAlgorithm>: Send, Sync);
+    }
+}
