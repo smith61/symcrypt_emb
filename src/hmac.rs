@@ -13,8 +13,8 @@ use crate::{
 };
 
 pub trait HmacAlgorithm {
-    type ExpandedKey: Zeroable + Default;
-    type StreamState: Zeroable + Default;
+    type ExpandedKey: Zeroable;
+    type StreamState: Zeroable;
     type Result;
 
     unsafe fn expand_key(
@@ -35,8 +35,16 @@ pub trait HmacAlgorithm {
 ///
 /// This type represents an uninitialized key.
 ///
-#[derive(Default)]
 pub struct HmacUninitializedKey<T: HmacAlgorithm>(T::ExpandedKey);
+
+impl<T: HmacAlgorithm> Default for HmacUninitializedKey<T>
+where
+    T::ExpandedKey: Default,
+{
+    fn default() -> Self {
+        Self(T::ExpandedKey::default())
+    }
+}
 
 ///
 /// This type represents a handle to an initialized key.
@@ -132,10 +140,12 @@ pub struct HmacUninitializedStream<
 
 impl<T: HmacAlgorithm, KP: OwningPointer<Target = HmacUninitializedKey<T>>> Default
     for HmacUninitializedStream<T, KP>
+where
+    T::StreamState: Default,
 {
     fn default() -> Self {
         Self {
-            stream_state: Default::default(),
+            stream_state: T::StreamState::default(),
             key_pointer: MaybeUninit::uninit(),
         }
     }
@@ -299,7 +309,6 @@ macro_rules! define_mac_algorithm {
     ($lc: ident, $uc: ident) => {
         paste! {
 
-            #[derive(Clone, Copy, Default)]
             pub struct [<$lc HmacAlgorithm>];
 
             pub type [<$lc HmacResult>] = [u8; symcrypt_sys::[<SYMCRYPT_ $uc _RESULT_SIZE>] as usize];

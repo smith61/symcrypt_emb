@@ -6,7 +6,7 @@ use symcrypt_sys::{PCSYMCRYPT_HASH, SIZE_T};
 use crate::{Zeroable, ptr::UniquePointer, symcrypt_init, symcrypt_wipe};
 
 pub trait HashAlgorithm {
-    type StreamState: Zeroable + Default;
+    type StreamState: Zeroable;
     type Result;
 
     fn get_hash_algorithm() -> PCSYMCRYPT_HASH;
@@ -21,8 +21,16 @@ pub trait HashAlgorithm {
 ///
 /// This type represents an uninitialized hashing stream.
 ///
-#[derive(Default)]
 pub struct UninitializedHasher<T: HashAlgorithm>(T::StreamState);
+
+impl<T: HashAlgorithm> Default for UninitializedHasher<T>
+where
+    T::StreamState: Default,
+{
+    fn default() -> Self {
+        Self(T::StreamState::default())
+    }
+}
 
 ///
 /// This type represents an initialized hashing stream.
@@ -109,7 +117,6 @@ macro_rules! define_hash_algorithm {
     ($lc: ident, $uc: ident) => {
         paste! {
 
-            #[derive(Clone, Copy, Default)]
             pub struct [<$lc HashAlgorithm>];
 
             pub type [<$lc HashResult>] = [u8; symcrypt_sys::[<SYMCRYPT_ $uc _RESULT_SIZE>] as usize];
