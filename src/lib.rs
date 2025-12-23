@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod cbc;
 pub mod gcm;
 pub mod hash;
 pub mod hmac;
@@ -27,6 +28,8 @@ use symcrypt_sys::{
 };
 
 pub unsafe trait Zeroable {}
+
+unsafe impl<const N: usize> Zeroable for [u8; N] {}
 
 fn symcrypt_init() {
     static ONCE: AtomicBool = AtomicBool::new(false);
