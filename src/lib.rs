@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub mod cbc;
+pub mod cipher;
 pub mod gcm;
 pub mod hash;
 pub mod hmac;

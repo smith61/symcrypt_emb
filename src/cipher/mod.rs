@@ -6,7 +6,9 @@ use crate::{
     symcrypt_init, symcrypt_wipe,
 };
 
-pub trait CbcAlgorithm {
+pub mod cbc;
+
+pub trait BlockCipherAlgorithm {
     type Key: Zeroable;
     type Block: Zeroable;
 
@@ -36,9 +38,9 @@ pub trait CbcAlgorithm {
     );
 }
 
-pub struct CbcUninitializedKey<T: CbcAlgorithm>(T::Key);
+pub struct UninitializedKey<T: BlockCipherAlgorithm>(T::Key);
 
-impl<T: CbcAlgorithm> Default for CbcUninitializedKey<T>
+impl<T: BlockCipherAlgorithm> Default for UninitializedKey<T>
 where
     T::Key: Default,
 {
@@ -52,13 +54,13 @@ where
 // threads as it contains no state.
 //
 
-unsafe impl<T: CbcAlgorithm> Send for CbcUninitializedKey<T> {}
-unsafe impl<T: CbcAlgorithm> Sync for CbcUninitializedKey<T> {}
+unsafe impl<T: BlockCipherAlgorithm> Send for UninitializedKey<T> {}
+unsafe impl<T: BlockCipherAlgorithm> Sync for UninitializedKey<T> {}
 
-pub struct CbcExpandedKey<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>>(P);
+pub struct ExpandedKey<T: BlockCipherAlgorithm, P: OwningPointer<Target = UninitializedKey<T>>>(P);
 
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> Drop
-    for CbcExpandedKey<T, P>
+impl<T: BlockCipherAlgorithm, P: OwningPointer<Target = UninitializedKey<T>>> Drop
+    for ExpandedKey<T, P>
 {
     fn drop(&mut self) {
         if let Some(initialized_key) = self.0.try_get_mut() {
@@ -67,15 +69,15 @@ impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> Drop
     }
 }
 
-impl<T: CbcAlgorithm, P: SharedPointer<Target = CbcUninitializedKey<T>>> Clone
-    for CbcExpandedKey<T, P>
+impl<T: BlockCipherAlgorithm, P: SharedPointer<Target = UninitializedKey<T>>> Clone
+    for ExpandedKey<T, P>
 {
     fn clone(&self) -> Self {
         Self(Clone::clone(&self.0))
     }
 }
 
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> CbcExpandedKey<T, P> {
+impl<T: BlockCipherAlgorithm, P: OwningPointer<Target = UninitializedKey<T>>> ExpandedKey<T, P> {
     pub fn expand_key(mut uninitialized_key: P, key_data: &[u8]) -> Self {
         symcrypt_init();
         unsafe {
@@ -84,108 +86,29 @@ impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> CbcExpa
         }
     }
 
-    pub fn as_ref<'a>(&'a self) -> CbcExpandedKey<T, &'a CbcUninitializedKey<T>> {
-        CbcExpandedKey(self.0.deref())
+    pub fn as_ref<'a>(&'a self) -> ExpandedKey<T, &'a UninitializedKey<T>> {
+        ExpandedKey(self.0.deref())
+    }
+
+    pub fn get_block_size(&self) -> usize {
+        T::get_block_size()
+    }
+
+    fn get_initialized_key_ref(&self) -> &T::Key {
+        &self.0.0
     }
 }
 
-pub struct CbcEncryptionStream<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> {
-    key: P,
-    chaining_value: T::Block,
-}
+#[derive(Clone, Copy, Default)]
+pub struct AesBlockCipher;
 
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> Drop
-    for CbcEncryptionStream<T, P>
-{
-    fn drop(&mut self) {
-        symcrypt_wipe(&mut self.chaining_value);
-    }
-}
-
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> CbcEncryptionStream<T, P> {
-    pub fn new(key: P, iv: T::Block) -> Self {
-        Self {
-            key,
-            chaining_value: iv,
-        }
-    }
-
-    pub fn get_chaining_value(&self) -> &T::Block {
-        &self.chaining_value
-    }
-
-    pub fn encrypt(&mut self, source: &[u8], destination: &mut [u8]) {
-        assert_eq!(source.len(), destination.len());
-        assert_eq!(source.len() % T::get_block_size(), 0);
-
-        unsafe {
-            T::cbc_encrypt(&self.key.0, &mut self.chaining_value, source, destination);
-        }
-    }
-
-    pub fn encrypt_in_place(&mut self, source_destination: &mut [u8]) {
-        assert_eq!(source_destination.len() % T::get_block_size(), 0);
-
-        unsafe {
-            T::cbc_encrypt_in_place(&self.key.0, &mut self.chaining_value, source_destination);
-        }
-    }
-}
-
-pub struct CbcDecryptionStream<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> {
-    key: P,
-    chaining_value: T::Block,
-}
-
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> Drop
-    for CbcDecryptionStream<T, P>
-{
-    fn drop(&mut self) {
-        symcrypt_wipe(&mut self.chaining_value);
-    }
-}
-
-impl<T: CbcAlgorithm, P: OwningPointer<Target = CbcUninitializedKey<T>>> CbcDecryptionStream<T, P> {
-    pub fn new(key: P, iv: T::Block) -> Self {
-        Self {
-            key,
-            chaining_value: iv,
-        }
-    }
-
-    pub fn get_chaining_value(&self) -> &T::Block {
-        &self.chaining_value
-    }
-
-    pub fn decrypt(&mut self, source: &[u8], destination: &mut [u8]) {
-        assert_eq!(source.len(), destination.len());
-        assert_eq!(source.len() % T::get_block_size(), 0);
-
-        unsafe {
-            T::cbc_decrypt(&self.key.0, &mut self.chaining_value, source, destination);
-        }
-    }
-
-    pub fn decrypt_in_place(&mut self, source_destination: &mut [u8]) {
-        assert_eq!(source_destination.len() % T::get_block_size(), 0);
-
-        unsafe {
-            T::cbc_decrypt_in_place(&self.key.0, &mut self.chaining_value, source_destination);
-        }
-    }
-}
-
-pub struct AesCbcAlgorithm;
-
-pub type AesCbcBlock = <AesCbcAlgorithm as CbcAlgorithm>::Block;
-pub type AesCbcUninitializedKey = CbcUninitializedKey<AesCbcAlgorithm>;
-pub type AesCbcExpandedKey<P> = CbcExpandedKey<AesCbcAlgorithm, P>;
-pub type AesCbcEncryptionStream<P> = CbcEncryptionStream<AesCbcAlgorithm, P>;
-pub type AesCbcDecryptionStream<P> = CbcDecryptionStream<AesCbcAlgorithm, P>;
+pub type AesBlock = <AesBlockCipher as BlockCipherAlgorithm>::Block;
+pub type AesUninitializedKey = UninitializedKey<AesBlockCipher>;
+pub type AesExpandedKey<P> = ExpandedKey<AesBlockCipher, P>;
 
 unsafe impl Zeroable for symcrypt_sys::SYMCRYPT_AES_EXPANDED_KEY {}
 
-impl CbcAlgorithm for AesCbcAlgorithm {
+impl BlockCipherAlgorithm for AesBlockCipher {
     type Key = symcrypt_sys::SYMCRYPT_AES_EXPANDED_KEY;
     type Block = [u8; symcrypt_sys::SYMCRYPT_AES_BLOCK_SIZE as usize];
 
