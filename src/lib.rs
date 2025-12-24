@@ -38,7 +38,7 @@ fn symcrypt_init() {
             SymCryptModuleInit(SYMCRYPT_CODE_VERSION_API, SYMCRYPT_CODE_VERSION_MINOR);
         }
 
-        ONCE.store(false, Ordering::Release);
+        ONCE.store(true, Ordering::Release);
     }
 }
 
